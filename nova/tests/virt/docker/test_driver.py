@@ -77,14 +77,16 @@ class DockerDriverTestCase(_VirtDriverTestCase, test.TestCase):
 
     #NOTE(bcwaldon): This exists only because _get_running_instance on the
     # base class will not let us set a custom disk/container_format.
-    def _get_running_instance(self, obj=False):
-        instance_ref = utils.get_test_instance(obj=obj)
+    def _get_running_instance(self, obj=False, image_name=None, flavor=None):
+        instance_ref = utils.get_test_instance(obj=obj, flavor=flavor)
         network_info = utils.get_test_network_info()
         network_info[0]['network']['subnets'][0]['meta']['dhcp_server'] = \
             '1.1.1.1'
         image_info = utils.get_test_image_info(None, instance_ref)
         image_info['disk_format'] = 'raw'
         image_info['container_format'] = 'docker'
+        if image_name:
+            image_info['name'] = image_name
         self.connection.spawn(self.ctxt, jsonutils.to_primitive(instance_ref),
                 image_info, [], 'herp', network_info=network_info)
         return instance_ref, network_info
@@ -156,8 +158,9 @@ class DockerDriverTestCase(_VirtDriverTestCase, test.TestCase):
                           instance=utils.get_test_instance(),
                           network_info=None)
 
-    def test_create_container(self, image_info=None):
-        instance_href = utils.get_test_instance()
+    def test_create_container(self, image_info=None, instance_href=None):
+        if instance_href is None:
+            instance_href = utils.get_test_instance()
         if image_info is None:
             image_info = utils.get_test_image_info(None, instance_href)
             image_info['disk_format'] = 'raw'
@@ -205,7 +208,7 @@ class DockerDriverTestCase(_VirtDriverTestCase, test.TestCase):
         image_info['container_format'] = 'invalid_format'
         self.assertRaises(exception.InstanceDeployFailure,
                           self.test_create_container,
-                          image_info)
+                          image_info, instance_href)
 
     @mock.patch.object(network, 'teardown_network')
     @mock.patch.object(nova.virt.docker.driver.DockerDriver,
@@ -295,3 +298,45 @@ class DockerDriverTestCase(_VirtDriverTestCase, test.TestCase):
         # That the lower-case snapshot name matches the name pushed
         image_name = repo.split("/")[1]
         self.assertEqual(image_info['name'].lower(), image_name)
+
+    def test_migrate_disk_and_power_off(self):
+        super(DockerDriverTestCase, self).test_migrate_disk_and_power_off()
+
+    def _spawn(self, image=None):
+        if not image:
+            image = 'XXX'
+        instance_ref, net_info = self._get_running_instance(image_name=image)
+        instance = self.connection._find_container_by_name(
+            instance_ref['name'])
+        self.assertTrue(instance)
+        num_instances = self.connection.get_num_instances()
+        self.assertEqual(1, num_instances)
+        return instance
+
+    def test_spawn_without_pull(self):
+        image = 'XXX'
+        self.assertTrue(self.connection.docker.inspect_image(image)
+                        is not None)
+        instance = self._spawn(image=image)
+        self.assertEqual(instance['Config']['Cmd'], ['sh'])
+
+    def test_spawn_with_pull_cmd(self):
+        image = 'image_with_cmd'
+        self.assertTrue(self.connection.docker.inspect_image(image) is None)
+        instance = self._spawn(image=image)
+
+        image_info = self.connection.docker.inspect_image(image)
+        cmd = image_info['container_config']['Cmd']
+        self.assertTrue(cmd)
+        self.assertTrue(self.connection.docker.inspect_image(image)
+                        is not None)
+        # if command supplied by image, no Cmd should passed
+        self.assertFalse(instance['Config']['Cmd'])
+
+    def test_spawn_with_pull_no_cmd(self):
+        image = 'image_without_cmd'
+        self.assertTrue(self.connection.docker.inspect_image(image) is None)
+        instance = self._spawn(image=image)
+        self.assertTrue(self.connection.docker.inspect_image(image)
+                        is not None)
+        self.assertEqual(instance['Config']['Cmd'], ['sh'])
