@@ -18,9 +18,11 @@
 import itertools
 import random
 
+import mock
 import mox
 
 from nova.compute import flavors
+from nova.compute import vm_states
 from nova import context
 from nova import db
 from nova import exception
@@ -29,6 +31,7 @@ from nova.network import api
 from nova.network import floating_ips
 from nova.network import model as network_model
 from nova.network import rpcapi as network_rpcapi
+from nova.objects import instance_info_cache as info_cache_obj
 from nova import policy
 from nova import test
 from nova import utils
@@ -86,7 +89,8 @@ class ApiTestCase(test.TestCase):
         flavor['rxtx_factor'] = 0
         sys_meta = flavors.save_flavor_info({}, flavor)
         instance = dict(id='id', uuid='uuid', project_id='project_id',
-            host='host', system_metadata=utils.dict_to_metadata(sys_meta))
+            host='host', system_metadata=utils.dict_to_metadata(sys_meta),
+            vm_state=vm_states.ACTIVE)
         self.network_api.allocate_for_instance(
             self.context, instance, 'vpn', 'requested_networks', macs=macs)
 
@@ -291,7 +295,7 @@ class TestUpdateInstanceCache(test.TestCase):
     def setUp(self):
         super(TestUpdateInstanceCache, self).setUp()
         self.context = context.get_admin_context()
-        self.instance = {'uuid': FAKE_UUID}
+        self.instance = {'uuid': FAKE_UUID, 'vm_state': vm_states.ACTIVE}
         self.impl = self.mox.CreateMock(api.API)
         vifs = [network_model.VIF(id='super_vif')]
         self.nw_info = network_model.NetworkInfo(vifs)
@@ -323,6 +327,15 @@ class TestUpdateInstanceCache(test.TestCase):
         api.update_instance_cache_with_nw_info(self.impl, self.context,
                                                self.instance,
                                                network_model.NetworkInfo([]))
+
+    def test_update_nw_info_deleted_instance(self):
+        with mock.patch.object(info_cache_obj.InstanceInfoCache,
+                               'save') as ic_save:
+            api.update_instance_cache_with_nw_info(
+                self.impl, self.context,
+                dict(self.instance, vm_state=vm_states.DELETED),
+                network_model.NetworkInfo([]))
+            self.assertFalse(ic_save.called)
 
     def test_decorator_return_object(self):
         @api.refresh_cache

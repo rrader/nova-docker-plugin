@@ -23,6 +23,7 @@ from oslo.config import cfg
 import six
 
 from nova.compute import flavors
+from nova.compute import vm_states
 from nova.conductor import api as conductor_api
 from nova import context
 from nova import exception
@@ -158,12 +159,14 @@ class TestNeutronv2Base(test.TestCase):
                          'display_name': 'test_instance',
                          'availability_zone': 'nova',
                          'host': 'some_host',
-                         'security_groups': []}
+                         'security_groups': [],
+                         'vm_state': vm_states.ACTIVE}
         self.instance2 = {'project_id': '9d049e4b60b64716978ab415e6fbd5c0',
                          'uuid': str(uuid.uuid4()),
                          'display_name': 'test_instance2',
                          'availability_zone': 'nova',
-                         'security_groups': []}
+                         'security_groups': [],
+                         'vm_state': vm_states.ACTIVE}
         self.nets1 = [{'id': 'my_netid1',
                       'name': 'my_netname1',
                       'tenant_id': 'my_tenantid'}]

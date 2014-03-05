@@ -20,6 +20,7 @@ import functools
 import inspect
 
 from nova.compute import flavors
+from nova.compute import vm_states
 from nova.db import base
 from nova import exception
 from nova.network import floating_ips
@@ -66,6 +67,10 @@ def refresh_cache(f):
 
 def update_instance_cache_with_nw_info(api, context, instance, nw_info=None,
                                        update_cells=True):
+    if instance['vm_state'] == vm_states.DELETED:
+        LOG.debug(_('Skipping info cache update for deleted instance.'),
+                  instance=instance)
+        return
     try:
         LOG.debug(_('Updating cache with info: %s'), nw_info)
         if not isinstance(nw_info, network_model.NetworkInfo):

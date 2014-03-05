@@ -24,6 +24,7 @@ import webob
 from nova.api.openstack.compute.contrib import security_groups
 from nova.api.openstack import xmlutil
 from nova import compute
+from nova.compute import vm_states
 from nova import context
 import nova.db
 from nova import exception
@@ -173,7 +174,8 @@ class TestNeutronSecurityGroups(
                          'info_cache': {'network_info': []},
                          'security_groups': [],
                          'uuid': str(uuid.uuid4()),
-                         'display_name': 'test_instance'}
+                         'display_name': 'test_instance',
+                         'vm_state': vm_states.ACTIVE}
         neutron = neutron_api.API()
         neutron.allocate_for_instance(context.get_admin_context(),
                                       fake_instance,
